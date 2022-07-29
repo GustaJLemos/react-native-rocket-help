@@ -2,32 +2,69 @@ import { Center, FlatList, Heading, HStack, Icon, IconButton, Text, useTheme, VS
 import Logo from '../assets/logo_secondary.svg'
 import { ChatTeardropText, SignOut } from 'phosphor-react-native'
 import { Filter } from '../components/Filter';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Order } from '../components/Order';
-import { OrderProps } from '../types/orderProps';
+import { OrderProps } from '../types/OrderProps';
 import { Button } from '../components/Button';
 import { useNavigation } from '@react-navigation/native';
+import { Alert } from 'react-native';
+import auth from '@react-native-firebase/auth'
+import firestore from '@react-native-firebase/firestore'
+import { Loading } from '../components/Loading';
+import { dateFormat } from '../utils/firestoreDateFormat';
 
 export function Home() {
+  //#region Hooks
   const { colors } = useTheme()
-  
   const [ statusSelected, setStatusSelected ] = useState<'open' | 'closed'>('open')
-
   const navigation  = useNavigation()
+  const [isLoading, setIsloading] = useState(false);
+  const [orders, setOrders] = useState<OrderProps[]>([])
+  //#endregion Hooks
 
-  const [orders, setOrders] = useState<OrderProps[]>([{
-    id: '123',
-    patrimony: '123456',
-    when: '18/07/2022 às 10:00',
-    status: 'open',
-  }])
-
+  //#region Functions
   function handleNewOrder() {
     navigation.navigate('new');
   }
 
   function handleOpenDetails(orderId: string) {
     navigation.navigate('details', { orderId: orderId })
+  }
+
+  function handleLogout(){
+    auth().signOut().catch(err => {
+      return Alert.alert('Sair', 'Não foi possível sair, tente novamente.');
+    });
+  }
+  //#endregion Functions
+
+  useEffect(() => {
+    setIsloading(true);
+
+    const subscriber = firestore()
+    .collection('orders')
+    .where('status', '==', statusSelected)
+    .onSnapshot(snapshot => {
+      const data = snapshot.docs.map(doc => {
+        const { patrimony, description, status, created_at } = doc.data();
+        return  {
+          id: doc.id,
+          patrimony, 
+          description, 
+          status, 
+          when: dateFormat(created_at)
+        }
+      })
+      setOrders(data);
+    })
+    // onSnapshot atualiza os dados em tempo real, ou seja, se eu mudar algo no bd ele reflete na aplicação em tempo real
+    setIsloading(false);
+
+    return subscriber
+  }, [statusSelected]);
+
+  if(isLoading) {
+    return <Loading />
   }
 
   return (
@@ -45,6 +82,7 @@ export function Home() {
             <IconButton 
                 icon={<SignOut size={26} color={colors.gray[300]} />}
                 _pressed={{ bg: 'gray.900' }}
+                onPress={handleLogout}
             />
         </HStack>
 
@@ -78,7 +116,9 @@ export function Home() {
             />
           </HStack>
 
-          <FlatList 
+         {isLoading 
+         ? <Loading /> : 
+         <FlatList 
             data={orders}
             keyExtractor={(item) => item.id} 
             renderItem={({ item }) => 
@@ -95,7 +135,7 @@ export function Home() {
                 </Text>
               </Center>
             )}
-          />
+          />}
           <Button title='Nova solicitação' onPress={handleNewOrder}/>
         </VStack>
     </VStack>
